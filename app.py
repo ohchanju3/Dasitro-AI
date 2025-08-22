@@ -1,4 +1,3 @@
-# app.py
 import io, os, math, base64, time
 from typing import Dict, Any, List, Optional, Tuple
 
@@ -389,27 +388,6 @@ def healthz():
         }
     }
 
-@app.post("/infer", dependencies=[Depends(_check_key)])
-async def infer(
-    image: UploadFile = File(...),
-    text: Optional[str] = Form(None),            # 백에서 함께 넘어와도 무시(로그용)
-    conf: Optional[float] = Query(None),
-    iou: Optional[float] = Query(None),
-    imgsz: Optional[int] = Query(None),
-    overlay: int = Query(0),
-    lite: int = Query(0)
-):
-    raw = await image.read()
-    out = analyze_image(
-        raw,
-        conf_thres = float(conf) if conf is not None else CONF_THRES,
-        iou_thres  = float(iou)  if iou  is not None else IOU_THRES,
-        img_size   = int(imgsz)  if imgsz is not None else IMG_SIZE,
-        return_overlay = bool(overlay),
-    )
-    if lite:
-        return JSONResponse({"risk_percent": out.get("risk_percent", 0.0)})
-    return JSONResponse(out)
 
 @app.post("/infer_batch", dependencies=[Depends(_check_key)])
 async def infer_batch(

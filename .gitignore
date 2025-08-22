@@ -6,4 +6,3 @@ images/
 data.db
 overlay.png
 result.json
-weights/*.pt
