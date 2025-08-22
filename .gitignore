@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+images/
+data.db
+overlay.png
+result.json
+weights/*.pt

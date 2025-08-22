@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pillow
+numpy
+ultralytics
+sqlalchemy
+python-geohash
+requests   # (테스트 스크립트용)
