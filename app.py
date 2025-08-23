@@ -1,26 +1,27 @@
-import io, os, math, base64, time
+import io, os, math, base64, time, datetime
 from typing import Dict, Any, List, Optional, Tuple
 
-from fastapi import FastAPI, UploadFile, File, Form, Query, Header, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, Query, Header, HTTPException, Depends, Body
 from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw, ImageOps, ImageFilter
 from ultralytics import YOLO
+import csv
 
-# =========================
-# 설정 (환경변수로 조정)
-# =========================
+DISTRICT_CSV = os.getenv("DISTRICT_CSV", "data/district_scores.csv")
+
+
+# ==== Inference 설정 ====
 MODEL_PATH  = os.getenv("MODEL_PATH", "weights/best.pt")
-AGG_DEFAULT = os.getenv("AGG_DEFAULT", "max")
+AGG_DEFAULT = os.getenv("AGG_DEFAULT", "max")  # max | mean | p90
 
-
-# 1차(빠른) 추론 파라미터
+# 1차(빠른) 추론
 CONF_THRES  = float(os.getenv("CONF_THRES", 0.50))
 IOU_THRES   = float(os.getenv("IOU_THRES", 0.50))
 IMG_SIZE    = int(os.getenv("IMG_SIZE", "1280"))
 MAX_DET     = int(os.getenv("MAX_DET", "300"))
 
-# 2차(민감) 자동 재시도 파라미터
-FALLBACK_ENABLE      = int(os.getenv("FALLBACK_ENABLE", "1"))  # 1=활성
+# 2차(민감) 자동 재시도
+FALLBACK_ENABLE      = int(os.getenv("FALLBACK_ENABLE", "1"))
 CONF_FALLBACK        = float(os.getenv("CONF_FALLBACK", "0.28"))
 IOU_FALLBACK         = float(os.getenv("IOU_FALLBACK",  "0.45"))
 IMG_SIZE_FALLBACK    = int(os.getenv("IMG_SIZE_FALLBACK", "1536"))
@@ -31,8 +32,8 @@ RISK_SCALE  = float(os.getenv("RISK_SCALE", 2.0))
 RISK_BIAS   = float(os.getenv("RISK_BIAS", 0.00))
 RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 5.0))   # 검출 0개일 때 고정 %
 
-# 노이즈 억제(너무 작은 검출 제거) — 얇은 크랙이면 낮춰주세요
-MIN_AREA_RATIO = float(os.getenv("MIN_AREA_RATIO", "0.000001"))  # 0.0001% = 1e-6
+# 노이즈 억제(너무 작은 검출 제거)
+MIN_AREA_RATIO = float(os.getenv("MIN_AREA_RATIO", "0.000001"))
 
 # 오버레이 (base64 PNG 크기 제한)
 OVERLAY_MAX_W = int(os.getenv("OVERLAY_MAX_W", "1280"))
@@ -40,58 +41,25 @@ OVERLAY_MAX_W = int(os.getenv("OVERLAY_MAX_W", "1280"))
 # 보안(백↔AI 내부용 키)
 AI_API_KEY  = os.getenv("AI_API_KEY", "")
 
-# 4 클래스 (키는 내부명; 가중치/색 등에서 사용)
+# ==== 모델/클래스 정의 ====
 CLASS_KEYS = ["longitudinal_crack", "transverse_crack", "alligator_crack", "pothole"]
-
-# 위험도 가중치/정규화
-W = {
-    "longitudinal_crack": 0.7,
-    "transverse_crack":   0.7,
-    "alligator_crack":    1.1,
-    "pothole":            1.3,
-}
-NMAX = {  # count 정규화 상한
-    "longitudinal_crack": 15,
-    "transverse_crack":   15,
-    "alligator_crack":    10,
-    "pothole":             5,
-}
-AMAX = {  # 면적비(이미지 대비) 정규화 상한
-    "longitudinal_crack": 0.04,
-    "transverse_crack":   0.04,
-    "alligator_crack":    0.05,
-    "pothole":            0.03,
-}
-
-# 시각화 색상 (RGB)
+W = { "longitudinal_crack": 0.7, "transverse_crack": 0.7, "alligator_crack": 1.1, "pothole": 1.3 }
+NMAX = {"longitudinal_crack":15, "transverse_crack":15, "alligator_crack":10, "pothole":5}
+AMAX = {"longitudinal_crack":0.04, "transverse_crack":0.04, "alligator_crack":0.05, "pothole":0.03}
 COLORS = {
-    "longitudinal_crack": (0, 153, 255),
-    "transverse_crack":   (0, 200, 120),
-    "alligator_crack":    (255, 0, 0),
-    "pothole":            (255, 165, 0),
+    "longitudinal_crack": (0,153,255),
+    "transverse_crack":   (0,200,120),
+    "alligator_crack":    (255,0,0),
+    "pothole":            (255,165,0),
 }
-
-# bbox → 면적 근사 계수 + 박스비율 상한
-BBOX2MASK = {
-    "longitudinal_crack": 0.12,   # 얇은 선형
-    "transverse_crack":   0.12,
-    "alligator_crack":    0.25,   # 망상형
-    "pothole":            0.65,   # 포트홀은 박스와 근사
-}
-MAX_BOX_RATIO = {
-    "longitudinal_crack": 0.18,
-    "transverse_crack":   0.18,
-    "alligator_crack":    0.35,
-    "pothole":            0.60,
-}
+BBOX2MASK = {"longitudinal_crack":0.12, "transverse_crack":0.12, "alligator_crack":0.25, "pothole":0.65}
+MAX_BOX_RATIO = {"longitudinal_crack":0.18, "transverse_crack":0.18, "alligator_crack":0.35, "pothole":0.60}
 
 def sigmoid(x: float) -> float:
     return 1/(1+math.exp(-x))
 
-# =========================
-# 앱/모델 초기화
-# =========================
-app = FastAPI(title="Sinkhole Risk AI (inference-only)")
+# ==== 앱/모델 초기화 ====
+app = FastAPI(title="Sinkhole Risk AI (inference + baseline combine)")
 model = YOLO(MODEL_PATH)
 
 # 모델 라벨 읽기
@@ -104,7 +72,6 @@ try:
 except Exception:
     MODEL_NAMES = {}
 
-# 모델 이름 → 내부 키로 정규화
 _NAME_CANON = {
     "pothole": "pothole",
     "alligator_crack": "alligator_crack",
@@ -116,22 +83,17 @@ def _name_to_key(raw: str) -> Optional[str]:
     k = "_".join(k.split())
     if k in _NAME_CANON:
         return _NAME_CANON[k]
-    # 허용할 변형
-    if k in {"alligator", "alligator_cracks"}: return "alligator_crack"
-    if k in {"transverse"}:                    return "transverse_crack"
-    if k in {"longitudinal"}:                  return "longitudinal_crack"
+    if k in {"alligator","alligator_cracks"}: return "alligator_crack"
+    if k in {"transverse"}: return "transverse_crack"
+    if k in {"longitudinal"}: return "longitudinal_crack"
     return None
 
-# =========================
-# 권한(옵션)
-# =========================
+# ==== 권한 ====
 def _check_key(x_ai_key: Optional[str] = Header(None)):
     if AI_API_KEY and x_ai_key != AI_API_KEY:
         raise HTTPException(status_code=401, detail="invalid X-AI-Key")
 
-# =========================
-# 유틸
-# =========================
+# ==== 유틸 ====
 def _polygon_area(poly: List[List[float]]) -> float:
     area = 0.0
     n = len(poly)
@@ -152,13 +114,12 @@ def _encode_overlay_png(im: Image.Image) -> str:
 
 def _preprocess_for_fallback(im: Image.Image) -> Image.Image:
     if PREPROC_FALLBACK == "autocontrast":
-        im2 = ImageOps.autocontrast(im, cutoff=1)  # 밝기 히스토그램 양끝 1% 컷
+        im2 = ImageOps.autocontrast(im, cutoff=1)
         im2 = im2.filter(ImageFilter.UnsharpMask(radius=1.2, percent=130, threshold=3))
         return im2
     return im
 
 def _draw_and_collect(im: Image.Image, res) -> Tuple[dict, dict, list, Image.Image]:
-    """YOLO 결과에서 counts/areas/detections/overlay를 얻음 (이름 기반 매핑)"""
     Wimg, Himg = im.size
     counts = {k:0 for k in W.keys()}
     areas  = {k:0.0 for k in W.keys()}
@@ -166,9 +127,8 @@ def _draw_and_collect(im: Image.Image, res) -> Tuple[dict, dict, list, Image.Ima
     overlay = im.copy()
     draw = ImageDraw.Draw(overlay, "RGBA")
 
-    # segmentation이 있으면 폴리곤 면적 사용
     if getattr(res, "masks", None) is not None and res.masks is not None:
-        polys = res.masks.xy  # list[ndarray(N,2)]
+        polys = res.masks.xy
         for i, cls_idx in enumerate(res.boxes.cls.tolist()):
             raw_name = MODEL_NAMES.get(int(cls_idx), str(cls_idx))
             c = _name_to_key(raw_name)
@@ -178,14 +138,13 @@ def _draw_and_collect(im: Image.Image, res) -> Tuple[dict, dict, list, Image.Ima
             poly = [(float(x), float(y)) for x, y in polys[i]]
             a = _polygon_area(poly) / (Wimg * Himg)
             if a < MIN_AREA_RATIO:
-                continue  # 너무 작은 노이즈 제거
+                continue
             detections.append({"type": c, "confidence": conf, "polygon": poly})
             areas[c] += max(0.0, a)
             counts[c] += 1
             col = COLORS.get(c, (0,255,0))
             draw.polygon(poly, fill=(col[0], col[1], col[2], 40), outline=(col[0], col[1], col[2], 200))
     else:
-        # bbox만 있을 때: 면적 근사
         for box, cls_idx, det_conf in zip(res.boxes.xyxy.tolist(), res.boxes.cls.tolist(), res.boxes.conf.tolist()):
             raw_name = MODEL_NAMES.get(int(cls_idx), str(cls_idx))
             c = _name_to_key(raw_name)
@@ -194,7 +153,7 @@ def _draw_and_collect(im: Image.Image, res) -> Tuple[dict, dict, list, Image.Ima
             x1, y1, x2, y2 = box
             box_ratio = max(0.0, (x2 - x1) * (y2 - y1) / (Wimg * Himg))
             if box_ratio < MIN_AREA_RATIO:
-                continue  # 아주 작은 박스 제거
+                continue
             box_ratio = min(box_ratio, MAX_BOX_RATIO.get(c, 1.0))
             used_area = box_ratio * BBOX2MASK.get(c, 0.6)
             areas[c] += used_area
@@ -208,16 +167,10 @@ def _draw_and_collect(im: Image.Image, res) -> Tuple[dict, dict, list, Image.Ima
 
 def _infer_once(im: Image.Image, conf_thres: float, iou_thres: float, img_size: int):
     res = model.predict(
-        im,
-        verbose=False,
-        conf=conf_thres,
-        iou=iou_thres,
-        imgsz=img_size,
-        max_det=MAX_DET
+        im, verbose=False, conf=conf_thres, iou=iou_thres, imgsz=img_size, max_det=MAX_DET
     )[0]
     return _draw_and_collect(im, res)
 
-# ---- 2x2 타일링 백업 ----
 def _crop_tiles(im: Image.Image, grid: int = 2) -> List[Tuple[Image.Image, Tuple[int,int]]]:
     W, H = im.size
     tiles = []
@@ -232,7 +185,6 @@ def _crop_tiles(im: Image.Image, grid: int = 2) -> List[Tuple[Image.Image, Tuple
 
 def _infer_tiled(im: Image.Image, grid: int = 2,
                  conf: float = 0.22, iou: float = 0.45, imgsz: int = 1280):
-    """타일 추론 결과를 원본 좌표계로 병합"""
     Wimg, Himg = im.size
     counts = {k:0 for k in W.keys()}
     areas  = {k:0.0 for k in W.keys()}
@@ -263,7 +215,7 @@ def _infer_tiled(im: Image.Image, grid: int = 2,
                 c = _name_to_key(raw)
                 if not c or c not in W: continue
                 x1, y1, x2, y2 = box
-                x1 += ox; y1 += oy; x2 += ox; y2 += oy   # 타일 → 원본 좌표
+                x1 += ox; y1 += oy; x2 += ox; y2 += oy
                 box_ratio = max(0.0, (x2-x1)*(y2-y1)/(Wimg*Himg))
                 if box_ratio < MIN_AREA_RATIO: continue
                 box_ratio = min(box_ratio, MAX_BOX_RATIO.get(c,1.0))
@@ -275,7 +227,6 @@ def _infer_tiled(im: Image.Image, grid: int = 2,
                 draw.rectangle([x1, y1, x2, y2], fill=(col[0], col[1], col[2], 40))
 
     return counts, areas, detections, overlay
-# ---- /타일링 백업 ----
 
 def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int, return_overlay: bool=False) -> Dict[str, Any]:
     t0 = time.time()
@@ -284,12 +235,10 @@ def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int
     except Exception:
         raise HTTPException(status_code=400, detail="invalid image")
 
-    # 1차: 기본(빠른)
     c1, a1, d1, ov1 = _infer_once(im, conf_thres, iou_thres, img_size)
     use_counts, use_areas, use_dets, use_overlay = c1, a1, d1, ov1
     used_pass = "fast"
 
-    # 2차: 비었으면(검출 0) 더 민감 + 전처리
     if FALLBACK_ENABLE and sum(c1.values()) == 0:
         im2 = _preprocess_for_fallback(im)
         c2, a2, d2, ov2 = _infer_once(im2, CONF_FALLBACK, IOU_FALLBACK, IMG_SIZE_FALLBACK)
@@ -300,30 +249,25 @@ def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int
                 use_counts, use_areas, use_dets, use_overlay = c2, a2, d2, ov2
                 used_pass = "fallback"
 
-    # 3차: 아직도 비면 2×2 타일링 백업
     if sum(use_counts.values()) == 0:
         c3, a3, d3, ov3 = _infer_tiled(im, grid=2, conf=0.22, iou=0.45, imgsz=1280)
         if sum(c3.values()) > 0:
             use_counts, use_areas, use_dets, use_overlay = c3, a3, d3, ov3
             used_pass = "tiled"
 
-    # 검출 0개면 고정값
     if sum(use_counts.values()) == 0 and all(v == 0.0 for v in use_areas.values()):
         out = {
             "risk_percent": float(RISK_EMPTY),
-            "explanations": [],
-            "detections": [],
-            "used_pass": used_pass,
-            "latency_ms": int((time.time()-t0)*1000),
+            "explanations": [], "detections": [],
+            "used_pass": used_pass, "latency_ms": int((time.time()-t0)*1000),
         }
         if return_overlay:
             out["preview_overlay_png"] = _encode_overlay_png(use_overlay)
         return out
 
-    # 위험도 계산
     score = RISK_BIAS
     explanations = []
-    for c in W.keys():  # 이름 기반
+    for c in W.keys():
         cn = min(use_counts[c] / max(NMAX[c], 1e-6), 1.0)
         an = min(use_areas[c]  / max(AMAX[c], 1e-6), 1.0)
         contrib = W[c] * (cn + an) / 2.0
@@ -344,29 +288,59 @@ def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int
         out["preview_overlay_png"] = _encode_overlay_png(use_overlay)
     return out
 
-# =========================
-# 집계 유틸 & 배치 엔드포인트
-# =========================
+# ==== 집계 유틸 ====
 def _percentile(values: List[float], p: float = 90) -> float:
     if not values: return 0.0
     vals = sorted(values)
     p = max(0.0, min(100.0, float(p)))
-    # nearest-rank
     k = max(0, min(len(vals)-1, int(math.ceil(p/100.0 * len(vals))) - 1))
     return float(vals[k])
 
 def _aggregate_risks(risks: List[float], mode: str = "max") -> float:
     mode = (mode or "max").lower()
     if not risks: return 0.0
-    if mode == "mean":
-        return float(sum(risks) / len(risks))
-    if mode in ("p90", "p95"):
-        return _percentile(risks, p=90 if mode=="p90" else 95)
-    return float(max(risks))  # 기본: 안전 우선
+    if mode == "mean": return float(sum(risks) / len(risks))
+    if mode in ("p90","p95"): return _percentile(risks, p=90 if mode=="p90" else 95)
+    return float(max(risks))
 
-# =========================
-# 엔드포인트
-# =========================
+# ===============================
+#   ▽▽▽  정성 점수 저장 (SQLite)
+# ===============================
+from sqlalchemy import create_engine, Column, Float, String, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+DB_URL = os.getenv("DB_URL", "sqlite:///data.db")
+Base = declarative_base()
+engine = create_engine(DB_URL, echo=False, future=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+class BaselineScore(Base):
+    __tablename__ = "baseline_scores"
+    district   = Column(String(64), primary_key=True)
+    groundwater= Column(Float, default=None)
+    ground     = Column(Float, default=None)
+    subway     = Column(Float, default=None)
+    incident   = Column(Float, default=None)
+    old        = Column(Float, default=None)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+Base.metadata.create_all(engine)
+
+_GRADE2PCT = {1:10.0, 2:30.0, 3:50.0, 4:70.0, 5:90.0}
+def _grade_to_percent(g: Optional[float]) -> Optional[float]:
+    if g is None: return None
+    try:
+        gi = int(round(float(g)))
+        return _GRADE2PCT.get(gi)
+    except Exception:
+        return None
+
+def _final_grade(p: float) -> int:
+    return 1 if p < 20 else 2 if p < 40 else 3 if p < 60 else 4 if p < 80 else 5
+
+# ===============================
+#            엔드포인트
+# ===============================
 @app.get("/healthz")
 def healthz():
     return {
@@ -376,18 +350,12 @@ def healthz():
         "class_keys": CLASS_KEYS,
         "params": {
             "fast": {"conf": CONF_THRES, "iou": IOU_THRES, "imgsz": IMG_SIZE, "max_det": MAX_DET},
-            "fallback": {
-                "enabled": bool(FALLBACK_ENABLE),
-                "conf": CONF_FALLBACK, "iou": IOU_FALLBACK, "imgsz": IMG_SIZE_FALLBACK,
-                "preproc": PREPROC_FALLBACK
-            },
+            "fallback": {"enabled": bool(FALLBACK_ENABLE), "conf": CONF_FALLBACK, "iou": IOU_FALLBACK, "imgsz": IMG_SIZE_FALLBACK, "preproc": PREPROC_FALLBACK},
             "risk": {"scale": RISK_SCALE, "bias": RISK_BIAS, "empty": RISK_EMPTY, "min_area_ratio": MIN_AREA_RATIO},
             "overlay": {"max_w": OVERLAY_MAX_W},
             "batch": {"agg_default": AGG_DEFAULT},
-            
         }
     }
-
 
 @app.post("/infer_batch", dependencies=[Depends(_check_key)])
 async def infer_batch(
@@ -396,9 +364,9 @@ async def infer_batch(
     conf: Optional[float] = Query(None),
     iou: Optional[float] = Query(None),
     imgsz: Optional[int] = Query(None),
-    overlay: int = Query(0),                       # 1이면 각 이미지 오버레이 포함
-    lite: int = Query(0),                          # 1이면 종합 위험도만
-    agg: str = Query(AGG_DEFAULT)                       # max | mean | p90
+    overlay: int = Query(0),
+    lite: int = Query(0),
+    agg: str = Query(AGG_DEFAULT)
 ):
     if not images:
         raise HTTPException(status_code=400, detail="no images")
@@ -409,18 +377,10 @@ async def infer_batch(
     iou_v  = float(iou)  if iou  is not None else IOU_THRES
     img_v  = int(imgsz)  if imgsz is not None else IMG_SIZE
 
-    per_results = []
-    risks = []
-
+    per_results, risks = [], []
     for uf in images:
         raw = await uf.read()
-        out = analyze_image(
-            raw,
-            conf_thres = conf_v,
-            iou_thres  = iou_v,
-            img_size   = img_v,
-            return_overlay = bool(overlay),
-        )
+        out = analyze_image(raw, conf_v, iou_v, img_v, return_overlay=bool(overlay))
         per_results.append({
             "filename": uf.filename,
             "risk_percent": out.get("risk_percent", 0.0),
@@ -432,12 +392,159 @@ async def infer_batch(
         risks.append(float(out.get("risk_percent", 0.0)))
 
     combined = _aggregate_risks(risks, mode=agg)
-
     if lite:
         return JSONResponse({"risk_percent": combined})
+    return JSONResponse({"combined_risk_percent": combined, "aggregate_mode": agg, "items": per_results})
 
-    return JSONResponse({
-        "combined_risk_percent": combined,
+# ====== 정성 점수 관리 ======
+@app.post("/districts/baseline/upsert", dependencies=[Depends(_check_key)])
+def upsert_baseline(item: dict = Body(...)):
+    """
+    JSON 예:
+    {
+      "district":"중구",
+      "groundwater":3, "ground":2, "subway":4, "incident":3, "old":2
+    }
+    일부 필드만 보내도 됨(부분 수정).
+    """
+    name = item.get("district")
+    if not name:
+        raise HTTPException(status_code=400, detail="district required")
+
+    with SessionLocal() as s:
+        row = s.query(BaselineScore).filter_by(district=name).first()
+        if not row:
+            row = BaselineScore(district=name)
+            s.add(row)
+        for k in ["groundwater","ground","subway","incident","old"]:
+            if k in item and item[k] is not None:
+                setattr(row, k, float(item[k]))
+        row.updated_at = datetime.datetime.utcnow()
+        s.commit()
+        out = {
+            "district": row.district,
+            "groundwater": row.groundwater, "ground": row.ground,
+            "subway": row.subway, "incident": row.incident, "old": row.old,
+            "updated_at": row.updated_at.isoformat()+"Z"
+        }
+    return {"status":"ok","baseline":out}
+
+@app.get("/districts/{name}/baseline", dependencies=[Depends(_check_key)])
+def get_baseline(name: str):
+    with SessionLocal() as s:
+        row = s.query(BaselineScore).filter_by(district=name).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="baseline not found")
+        return {
+            "district": row.district,
+            "groundwater": row.groundwater, "ground": row.ground,
+            "subway": row.subway, "incident": row.incident, "old": row.old,
+            "updated_at": row.updated_at.isoformat()+"Z"
+        }
+
+# ====== 이미지 + 정성 점수 결합 ======
+@app.post("/combine_risk", dependencies=[Depends(_check_key)])
+async def combine_risk(
+    district: Optional[str] = Form(None),
+    images: Optional[List[UploadFile]] = File(None),   # 0~3장
+    agg: str = Query(AGG_DEFAULT),
+
+    # 가중치(기본: 이미지 40, 나머지 15씩, old 0)
+    w_image: float = Form(40),
+    w_groundwater: float = Form(15),
+    w_ground: float = Form(15),
+    w_subway: float = Form(15),
+    w_incident: float = Form(15),
+    w_old: float = Form(0),
+
+    lite: int = Query(0)
+):
+    # 1) baseline 로드
+    baseline = None
+    if district:
+        with SessionLocal() as s:
+            row = s.query(BaselineScore).filter_by(district=district).first()
+            if row:
+                baseline = dict(
+                    groundwater=row.groundwater, ground=row.ground,
+                    subway=row.subway, incident=row.incident, old=row.old
+                )
+
+    # 2) 이미지 위험도
+    img_percent = None
+    items = []
+    if images:
+        if len(images) > 3:
+            raise HTTPException(status_code=400, detail="up to 3 images allowed")
+        risks = []
+        for uf in images:
+            raw = await uf.read()
+            out = analyze_image(raw, CONF_THRES, IOU_THRES, IMG_SIZE, return_overlay=False)
+            rp = float(out.get("risk_percent", 0.0))
+            risks.append(rp)
+            items.append({"filename": uf.filename, "risk_percent": rp, "used_pass": out.get("used_pass")})
+        img_percent = _aggregate_risks(risks, mode=agg) if risks else None
+
+    # 3) 정성 → 퍼센트
+    def g2p(v): return _grade_to_percent(v) if v is not None else None
+    gw = g2p((baseline or {}).get("groundwater")) if baseline else None
+    gr = g2p((baseline or {}).get("ground")) if baseline else None
+    sw = g2p((baseline or {}).get("subway")) if baseline else None
+    ic = g2p((baseline or {}).get("incident")) if baseline else None
+    od = g2p((baseline or {}).get("old")) if baseline else None
+
+    # 4) 가중 평균(존재하는 항목만)
+    parts, weights, labels = [], [], []
+    if img_percent is not None:
+        parts.append(img_percent); weights.append(w_image); labels.append("image")
+    for v,w,name in [(gw,w_groundwater,"groundwater"),(gr,w_ground,"ground"),
+                     (sw,w_subway,"subway"),(ic,w_incident,"incident"),(od,w_old,"old")]:
+        if v is not None:
+            parts.append(v); weights.append(w); labels.append(name)
+
+    if not parts:
+        raise HTTPException(status_code=400, detail="no image or baseline for this district")
+
+    filt = [(p,w,l) for p,w,l in zip(parts,weights,labels) if w and w>0]
+    if not filt:
+        weights = [1.0]*len(parts)
+        weights_n = [w/sum(weights) for w in weights]
+    else:
+        parts, weights, labels = zip(*filt)
+        weights_n = [w/sum(weights) for w in weights]
+
+    combined = float(sum(p*w for p,w in zip(parts,weights_n)))
+    grade = _final_grade(combined)
+
+    resp = {
+        "district": district,
+        "combined_risk_percent": round(combined,2),
+        "combined_grade_1_to_5": grade,
         "aggregate_mode": agg,
-        "items": per_results
-    })
+        "weights_used": {
+            "image": w_image, "groundwater": w_groundwater, "ground": w_ground,
+            "subway": w_subway, "incident": w_incident, "old": w_old
+        }
+    }
+    if not lite:
+        resp["image_part"] = {"img_percent": img_percent, "items": items} if img_percent is not None else None
+        resp["baseline_part"] = {
+            "groundwater_percent": gw, "ground_percent": gr, "subway_percent": sw,
+            "incident_percent": ic, "old_percent": od
+        } if baseline else None
+
+    return resp
+
+
+@app.get("/district_scores")
+def list_scores():
+    with open(DISTRICT_CSV, newline='', encoding='utf-8') as f:
+        return list(csv.DictReader(f))
+
+@app.get("/district_scores/{gu}")
+def get_score(gu: str):
+    with open(DISTRICT_CSV, newline='', encoding='utf-8') as f:
+        for row in csv.DictReader(f):
+            if row.get("district") == gu:
+                return row
+    raise HTTPException(status_code=404, detail="district not found")

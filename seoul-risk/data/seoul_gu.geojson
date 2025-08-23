@@ -1,0 +1,1206 @@
+{
+"type": "FeatureCollection",
+"features": [
+{
+  "type": "Feature",
+  "id": "relation/2410520",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "강남구",
+    "name:en": "Gangnam-gu",
+    "name:ja": "江南区",
+    "name:ko": "강남구",
+    "name:ko-Hani": "江南區",
+    "name:zh": "江南區",
+    "name:zh-Hans": "江南区",
+    "name:zh-Hant": "江南區",
+    "ref": "23",
+    "type": "boundary",
+    "wikidata": "Q20398",
+    "wikipedia": "ko:강남구",
+    "id": "relation/2410520"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0083762,
+          37.4564808
+        ],
+        [
+          127.1227254,
+          37.4564808
+        ],
+        [
+          127.1227254,
+          37.5399807
+        ],
+        [
+          127.0083762,
+          37.5399807
+        ],
+        [
+          127.0083762,
+          37.4564808
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414774",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "동작구",
+    "name:en": "Dongjak-gu",
+    "name:ja": "銅雀区",
+    "name:ko": "동작구",
+    "name:ko-Hani": "銅雀區",
+    "name:zh": "銅雀區",
+    "name:zh-Hans": "铜雀区",
+    "name:zh-Hant": "銅雀區",
+    "ref": "20",
+    "type": "boundary",
+    "wikidata": "Q50385",
+    "wikipedia": "ko:동작구",
+    "id": "relation/2414774"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9031479,
+          37.4754314
+        ],
+        [
+          126.985234,
+          37.4754314
+        ],
+        [
+          126.985234,
+          37.5196678
+        ],
+        [
+          126.9031479,
+          37.5196678
+        ],
+        [
+          126.9031479,
+          37.4754314
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414775",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "강서구",
+    "name:en": "Gangseo-gu",
+    "name:ja": "江西区",
+    "name:ko": "강서구",
+    "name:ko-Hani": "江西區",
+    "name:zh": "江西區",
+    "name:zh-Hans": "江西区",
+    "name:zh-Hant": "江西區",
+    "ref": "16",
+    "type": "boundary",
+    "wikidata": "Q50192",
+    "wikipedia": "ko:강서구 (서울특별시)",
+    "id": "relation/2414775"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.7644328,
+          37.5264842
+        ],
+        [
+          126.8807919,
+          37.5264842
+        ],
+        [
+          126.8807919,
+          37.6050356
+        ],
+        [
+          126.7644328,
+          37.6050356
+        ],
+        [
+          126.7644328,
+          37.5264842
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414776",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "금천구",
+    "name:en": "Geumcheon-gu",
+    "name:ja": "衿川区",
+    "name:ko": "금천구",
+    "name:ko-Hani": "衿川區",
+    "name:zh": "衿川區",
+    "name:zh-Hans": "衿川区",
+    "name:zh-Hant": "衿川區",
+    "ref": "18",
+    "type": "boundary",
+    "wikidata": "Q50359",
+    "wikipedia": "ko:금천구",
+    "id": "relation/2414776"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8718436,
+          37.4336201
+        ],
+        [
+          126.9290862,
+          37.4336201
+        ],
+        [
+          126.9290862,
+          37.4862945
+        ],
+        [
+          126.8718436,
+          37.4862945
+        ],
+        [
+          126.8718436,
+          37.4336201
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414777",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "구로구",
+    "name:en": "Guro-gu",
+    "name:ja": "九老区",
+    "name:ko": "구로구",
+    "name:ko-Hani": "九老區",
+    "name:zh": "九老區",
+    "name:zh-Hans": "九老区",
+    "name:zh-Hant": "九老區",
+    "ref": "17",
+    "type": "boundary",
+    "wikidata": "Q50356",
+    "wikipedia": "ko:구로구",
+    "id": "relation/2414777"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8130271,
+          37.4731126
+        ],
+        [
+          126.9031479,
+          37.4731126
+        ],
+        [
+          126.9031479,
+          37.5177752
+        ],
+        [
+          126.8130271,
+          37.5177752
+        ],
+        [
+          126.8130271,
+          37.4731126
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414778",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "관악구",
+    "name:en": "Gwanak-gu",
+    "name:ja": "冠岳区",
+    "name:ko": "관악구",
+    "name:ko-Hani": "冠岳區",
+    "name:zh": "冠岳區",
+    "name:zh-Hans": "冠岳区",
+    "name:zh-Hant": "冠岳區",
+    "ref": "21",
+    "type": "boundary",
+    "wikidata": "Q50353",
+    "wikipedia": "ko:관악구",
+    "id": "relation/2414778"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.898947,
+          37.4353751
+        ],
+        [
+          126.988543,
+          37.4353751
+        ],
+        [
+          126.988543,
+          37.495038
+        ],
+        [
+          126.898947,
+          37.495038
+        ],
+        [
+          126.898947,
+          37.4353751
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414779",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "서초구",
+    "name:en": "Seocho-gu",
+    "name:ja": "瑞草区",
+    "name:ko": "서초구",
+    "name:ko-Hani": "瑞草區",
+    "name:zh": "瑞草區",
+    "name:zh-Hans": "瑞草区",
+    "name:zh-Hant": "瑞草區",
+    "ref": "22",
+    "type": "boundary",
+    "wikidata": "Q20395",
+    "wikipedia": "ko:서초구",
+    "id": "relation/2414779"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9805485,
+          37.4285424
+        ],
+        [
+          127.0964539,
+          37.4285424
+        ],
+        [
+          127.0964539,
+          37.5258834
+        ],
+        [
+          126.9805485,
+          37.5258834
+        ],
+        [
+          126.9805485,
+          37.4285424
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414780",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "양천구",
+    "name:en": "Yangcheon-gu",
+    "name:ja": "陽川区",
+    "name:ko": "양천구",
+    "name:ko-Hani": "陽川區",
+    "name:zh": "陽川區",
+    "name:zh-Hans": "阳川区",
+    "name:zh-Hant": "陽川區",
+    "ref": "15",
+    "type": "boundary",
+    "wikidata": "Q50420",
+    "wikipedia": "ko:양천구",
+    "id": "relation/2414780"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8215906,
+          37.5028694
+        ],
+        [
+          126.8906843,
+          37.5028694
+        ],
+        [
+          126.8906843,
+          37.5512401
+        ],
+        [
+          126.8215906,
+          37.5512401
+        ],
+        [
+          126.8215906,
+          37.5028694
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2414781",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "영등포구",
+    "name:en": "Yeongdeungpo-gu",
+    "name:ja": "永登浦区",
+    "name:ko": "영등포구",
+    "name:ko-Hani": "永登浦區",
+    "name:zh": "永登浦區",
+    "name:zh-Hans": "永登浦区",
+    "name:zh-Hant": "永登浦區",
+    "ref": "19",
+    "type": "boundary",
+    "wikidata": "Q50190",
+    "wikipedia": "ko:영등포구",
+    "id": "relation/2414781"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8780242,
+          37.4849734
+        ],
+        [
+          126.9499303,
+          37.4849734
+        ],
+        [
+          126.9499303,
+          37.5562521
+        ],
+        [
+          126.8780242,
+          37.5562521
+        ],
+        [
+          126.8780242,
+          37.4849734
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419940",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "도봉구",
+    "name:en": "Dobong-gu",
+    "name:ja": "道峰区",
+    "name:ko": "도봉구",
+    "name:ko-Hani": "道峰區",
+    "name:zh": "道峰區",
+    "name:zh-Hans": "道峰区",
+    "name:zh-Hant": "道峰區",
+    "ref": "10",
+    "type": "boundary",
+    "wikidata": "Q50374",
+    "wikipedia": "ko:도봉구",
+    "id": "relation/2419940"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0081028,
+          37.6312009
+        ],
+        [
+          127.0559124,
+          37.6312009
+        ],
+        [
+          127.0559124,
+          37.7014794
+        ],
+        [
+          127.0081028,
+          37.7014794
+        ],
+        [
+          127.0081028,
+          37.6312009
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419941",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "동대문구",
+    "name:en": "Dongdaemun-gu",
+    "name:ja": "東大門区",
+    "name:ko": "동대문구",
+    "name:ko-Hani": "東大門區",
+    "name:zh": "東大門區",
+    "name:zh-Hans": "东大门区",
+    "name:zh-Hant": "東大門區",
+    "ref": "06",
+    "type": "boundary",
+    "wikidata": "Q50382",
+    "wikipedia": "ko:동대문구",
+    "id": "relation/2419941"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0231792,
+          37.5600183
+        ],
+        [
+          127.078512,
+          37.5600183
+        ],
+        [
+          127.078512,
+          37.6068288
+        ],
+        [
+          127.0231792,
+          37.6068288
+        ],
+        [
+          127.0231792,
+          37.5600183
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419942",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "은평구",
+    "name:en": "Eunpyeong-gu",
+    "name:ja": "恩平区",
+    "name:ko": "은평구",
+    "name:ko-Hani": "恩平區",
+    "name:zh": "恩平區",
+    "name:zh-Hans": "恩平区",
+    "name:zh-Hant": "恩平區",
+    "ref": "12",
+    "type": "boundary",
+    "wikidata": "Q50432",
+    "wikipedia": "ko:은평구",
+    "id": "relation/2419942"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8820584,
+          37.576001
+        ],
+        [
+          126.9633811,
+          37.576001
+        ],
+        [
+          126.9633811,
+          37.659207
+        ],
+        [
+          126.8820584,
+          37.659207
+        ],
+        [
+          126.8820584,
+          37.576001
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419943",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "강북구",
+    "name:en": "Gangbuk-gu",
+    "name:ja": "江北区",
+    "name:ko": "강북구",
+    "name:ko-Hani": "江北區",
+    "name:zh": "江北區",
+    "name:zh-Hans": "江北区",
+    "name:zh-Hant": "江北區",
+    "ref": "09",
+    "type": "boundary",
+    "wikidata": "Q50349",
+    "wikipedia": "ko:강북구",
+    "id": "relation/2419943"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9796299,
+          37.6091181
+        ],
+        [
+          127.0499886,
+          37.6091181
+        ],
+        [
+          127.0499886,
+          37.6854213
+        ],
+        [
+          126.9796299,
+          37.6854213
+        ],
+        [
+          126.9796299,
+          37.6091181
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419944",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "강동구",
+    "name:en": "Gangdong-gu",
+    "name:ja": "江東区",
+    "name:ko": "강동구",
+    "name:ko-Hani": "江東區",
+    "name:zh": "江東區",
+    "name:zh-Hans": "江东区",
+    "name:zh-Hant": "江東區",
+    "ref": "25",
+    "type": "boundary",
+    "wikidata": "Q50348",
+    "wikipedia": "ko:강동구",
+    "id": "relation/2419944"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.1090669,
+          37.5167892
+        ],
+        [
+          127.1837702,
+          37.5167892
+        ],
+        [
+          127.1837702,
+          37.5812021
+        ],
+        [
+          127.1090669,
+          37.5812021
+        ],
+        [
+          127.1090669,
+          37.5167892
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419945",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "광진구",
+    "name:en": "Gwangjin-gu",
+    "name:ja": "広津区",
+    "name:ko": "광진구",
+    "name:ko-Hani": "廣津區",
+    "name:zh": "廣津區",
+    "name:zh-Hans": "广津区",
+    "name:zh-Hant": "廣津區",
+    "ref": "05",
+    "type": "boundary",
+    "wikidata": "Q50355",
+    "wikipedia": "ko:광진구",
+    "id": "relation/2419945"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.057204,
+          37.5227725
+        ],
+        [
+          127.1151675,
+          37.5227725
+        ],
+        [
+          127.1151675,
+          37.5734267
+        ],
+        [
+          127.057204,
+          37.5734267
+        ],
+        [
+          127.057204,
+          37.5227725
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419946",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "종로구",
+    "name:en": "Jongno-gu",
+    "name:ja": "鍾路区",
+    "name:ko": "종로구",
+    "name:ko-Hani": "鍾路區",
+    "name:zh": "鍾路區",
+    "name:zh-Hans": "钟路区",
+    "name:zh-Hant": "鍾路區",
+    "ref": "01",
+    "type": "boundary",
+    "wikidata": "Q36929",
+    "wikipedia": "ko:종로구",
+    "id": "relation/2419946"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9489043,
+          37.5657959
+        ],
+        [
+          127.023419,
+          37.5657959
+        ],
+        [
+          127.023419,
+          37.632353
+        ],
+        [
+          126.9489043,
+          37.632353
+        ],
+        [
+          126.9489043,
+          37.5657959
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419947",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "중구",
+    "name:en": "Jung-gu",
+    "name:ja": "中区",
+    "name:ko": "중구",
+    "name:ko-Hani": "中區",
+    "name:zh": "中區",
+    "name:zh-Hans": "中区",
+    "name:zh-Hant": "中區",
+    "ref": "02",
+    "type": "boundary",
+    "wikidata": "Q50441",
+    "wikipedia": "ko:중구 (서울특별시)",
+    "id": "relation/2419947"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9615402,
+          37.5438572
+        ],
+        [
+          127.0267821,
+          37.5438572
+        ],
+        [
+          127.0267821,
+          37.5719426
+        ],
+        [
+          126.9615402,
+          37.5719426
+        ],
+        [
+          126.9615402,
+          37.5438572
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419948",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "중랑구",
+    "name:en": "Jungnang-gu",
+    "name:ja": "中浪区",
+    "name:ko": "중랑구",
+    "name:ko-Hani": "中浪區",
+    "name:zh": "中浪區",
+    "name:zh-Hans": "中浪区",
+    "name:zh-Hant": "中浪區",
+    "ref": "07",
+    "type": "boundary",
+    "wikidata": "Q50444",
+    "wikipedia": "ko:중랑구",
+    "id": "relation/2419948"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0693771,
+          37.56955
+        ],
+        [
+          127.1183601,
+          37.56955
+        ],
+        [
+          127.1183601,
+          37.6210737
+        ],
+        [
+          127.0693771,
+          37.6210737
+        ],
+        [
+          127.0693771,
+          37.56955
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419949",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "마포구",
+    "name:en": "Mapo-gu",
+    "name:ja": "麻浦区",
+    "name:ko": "마포구",
+    "name:ko-Hani": "麻浦區",
+    "name:zh": "麻浦區",
+    "name:zh-Hans": "麻浦区",
+    "name:zh-Hant": "麻浦區",
+    "ref": "14",
+    "type": "boundary",
+    "wikidata": "Q50388",
+    "wikipedia": "ko:마포구",
+    "id": "relation/2419949"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.8536285,
+          37.5337723
+        ],
+        [
+          126.963897,
+          37.5337723
+        ],
+        [
+          126.963897,
+          37.5907944
+        ],
+        [
+          126.8536285,
+          37.5907944
+        ],
+        [
+          126.8536285,
+          37.5337723
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419950",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "노원구",
+    "name:en": "Nowon-gu",
+    "name:ja": "蘆原区",
+    "name:ko": "노원구",
+    "name:ko-Hani": "蘆原區",
+    "name:zh": "蘆原區",
+    "name:zh-Hans": "芦原区",
+    "name:zh-Hant": "蘆原區",
+    "ref": "11",
+    "type": "boundary",
+    "wikidata": "Q50368",
+    "wikipedia": "ko:노원구",
+    "id": "relation/2419950"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0417236,
+          37.6143149
+        ],
+        [
+          127.1124872,
+          37.6143149
+        ],
+        [
+          127.1124872,
+          37.6962169
+        ],
+        [
+          127.0417236,
+          37.6962169
+        ],
+        [
+          127.0417236,
+          37.6143149
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419951",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "서대문구",
+    "name:en": "Seodaemun-gu",
+    "name:ja": "西大門区",
+    "name:ko": "서대문구",
+    "name:ko-Hani": "西大門區",
+    "name:zh": "西大門區",
+    "name:zh-Hans": "西大门区",
+    "name:zh-Hant": "西大門區",
+    "ref": "13",
+    "type": "boundary",
+    "wikidata": "Q50408",
+    "wikipedia": "ko:서대문구",
+    "id": "relation/2419951"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9019475,
+          37.5551024
+        ],
+        [
+          126.9694716,
+          37.5551024
+        ],
+        [
+          126.9694716,
+          37.6107512
+        ],
+        [
+          126.9019475,
+          37.6107512
+        ],
+        [
+          126.9019475,
+          37.5551024
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419952",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "성북구",
+    "name:en": "Seongbuk-gu",
+    "name:ja": "城北区",
+    "name:ko": "성북구",
+    "name:ko-Hani": "城北區",
+    "name:zh": "城北區",
+    "name:zh-Hans": "城北区",
+    "name:zh-Hant": "城北區",
+    "ref": "08",
+    "type": "boundary",
+    "wikidata": "Q50412",
+    "wikipedia": "ko:성북구",
+    "id": "relation/2419952"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.974527,
+          37.5776152
+        ],
+        [
+          127.0717735,
+          37.5776152
+        ],
+        [
+          127.0717735,
+          37.6365418
+        ],
+        [
+          126.974527,
+          37.6365418
+        ],
+        [
+          126.974527,
+          37.5776152
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419953",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "성동구",
+    "name:en": "Seongdong-gu",
+    "name:ja": "城東区",
+    "name:ko": "성동구",
+    "name:ko-Hani": "城東區",
+    "name:zh": "城東區",
+    "name:zh-Hans": "城东区",
+    "name:zh-Hant": "城東區",
+    "ref": "04",
+    "type": "boundary",
+    "wikidata": "Q50411",
+    "wikipedia": "ko:성동구",
+    "id": "relation/2419953"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.008302,
+          37.5301151
+        ],
+        [
+          127.073761,
+          37.5301151
+        ],
+        [
+          127.073761,
+          37.5730162
+        ],
+        [
+          127.008302,
+          37.5730162
+        ],
+        [
+          127.008302,
+          37.5301151
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419954",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "송파구",
+    "name:en": "Songpa-gu",
+    "name:ja": "松坡区",
+    "name:ko": "송파구",
+    "name:ko-Hani": "松坡區",
+    "name:zh": "松坡區",
+    "name:zh-Hans": "松坡区",
+    "name:zh-Hant": "松坡區",
+    "ref": "24",
+    "type": "boundary",
+    "wikidata": "Q50415",
+    "wikipedia": "ko:송파구",
+    "id": "relation/2419954"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          127.0665922,
+          37.4669573
+        ],
+        [
+          127.1615088,
+          37.4669573
+        ],
+        [
+          127.1615088,
+          37.5431713
+        ],
+        [
+          127.0665922,
+          37.5431713
+        ],
+        [
+          127.0665922,
+          37.4669573
+        ]
+      ]
+    ]
+  }
+},
+{
+  "type": "Feature",
+  "id": "relation/2419955",
+  "properties": {
+    "admin_level": "6",
+    "boundary": "administrative",
+    "name": "용산구",
+    "name:en": "Yongsan-gu",
+    "name:ja": "龍山区",
+    "name:ko": "용산구",
+    "name:ko-Hani": "龍山區",
+    "name:ko-Latn": "Yongsan-gu",
+    "name:zh": "龍山區",
+    "name:zh-Hans": "龙山区",
+    "name:zh-Hant": "龍山區",
+    "ref": "03",
+    "type": "boundary",
+    "wikidata": "Q50429",
+    "wikipedia": "ko:용산구",
+    "id": "relation/2419955"
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          126.9445805,
+          37.5064659
+        ],
+        [
+          127.0175196,
+          37.5064659
+        ],
+        [
+          127.0175196,
+          37.5556438
+        ],
+        [
+          126.9445805,
+          37.5556438
+        ],
+        [
+          126.9445805,
+          37.5064659
+        ]
+      ]
+    ]
+  }
+}
+]
+}
