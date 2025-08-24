@@ -317,8 +317,17 @@ def _aggregate_risks(risks: List[float], mode: str = "max") -> float:
     return float(max(risks))
 
 def _load_csv_rows(path: str) -> List[dict]:
-    with open(path, newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
+    # ★ utf-8-sig 로 BOM 안전하게 제거
+    with open(path, newline='', encoding='utf-8-sig') as f:
+        rows = list(csv.DictReader(f))
+    # ★ gu/dong 를 로드 시점에 표준화
+    for r in rows:
+        if "gu" in r and r["gu"] is not None:
+            r["gu"] = _n(r["gu"])
+        if "dong" in r and r["dong"] is not None:
+            r["dong"] = _n(r["dong"])
+    return rows
+
 
 def _load_dong_rows() -> List[dict]:
     return _load_csv_rows(DONG_CSV)
@@ -329,6 +338,52 @@ def _to_int_safe(v) -> Optional[int]:
         return int(round(float(v)))
     except:
         return None
+    
+# ===============================
+# 이름 정규화/매칭 유틸
+# ===============================
+import re, unicodedata
+from difflib import get_close_matches
+
+def _n(s: str) -> str:
+    if not s: return ""
+    s = str(s).replace("\ufeff","")          # BOM 제거
+    s = unicodedata.normalize("NFC", s)      # 유니코드 정규화
+    s = re.sub(r"\s+", " ", s).strip()       # 공백 정리
+    return s
+
+def _strip_paren(s: str) -> str:
+    return re.sub(r"\(.*?\)", "", s).strip()
+
+def _norm_gu(s: str) -> str:
+    return _n(_strip_paren(s))
+
+_DOT = re.compile(r"[·\.]")
+
+def _dong_aliases(d: str) -> set:
+    """상계3·4동 → {상계3동, 상계4동} 같은 별칭 생성"""
+    base = _n(_strip_paren(d))
+    out = {base}
+    if "동" in base and _DOT.search(base):
+        head = base.split("동")[0]
+        m = re.match(r"^([가-힣A-Za-z]+)([0-9·\.]+)$", head)
+        if m:
+            pref, nums = m.groups()
+            for tok in _DOT.split(nums):
+                tok = tok.strip()
+                if tok: out.add(f"{pref}{tok}동")
+    if "제" in base:
+        out.add(re.sub(r"제(\d+)동$", r"\1동", base))  # 제1동 → 1동
+    return out
+
+def _eq_gu(a: str, b: str) -> bool:
+    return _norm_gu(a) == _norm_gu(b)
+
+def _eq_dong(a: str, b: str) -> bool:
+    A, B = _n(_strip_paren(a)), _n(_strip_paren(b))
+    if A == B: return True
+    return bool(_dong_aliases(A) & _dong_aliases(B))
+
 
 # ===============================
 #   ▽▽▽  정성 점수 저장 (SQLite)
@@ -366,12 +421,8 @@ def _final_grade(p: float) -> int:
 
 # ===== Helper: 동/구 베이스라인 로드 =====
 def _get_dong_baseline(district: str, dong: str) -> dict:
-    """
-    dong_scores.csv에서 등급(1~5)을 읽어 baseline dict 반환.
-    incident/subway/groundwater/old 만 사용(구 DB 스키마와 일치).
-    """
     for r in _load_dong_rows():
-        if r.get("gu") == district and r.get("dong") == dong:
+        if _eq_gu(r.get("gu",""), district) and _eq_dong(r.get("dong",""), dong):
             return dict(
                 incident=_to_int_safe(r.get("incident_grade")),
                 subway=_to_int_safe(r.get("subway_grade")),
@@ -379,6 +430,7 @@ def _get_dong_baseline(district: str, dong: str) -> dict:
                 old=_to_int_safe(r.get("old")),
             )
     raise HTTPException(status_code=404, detail="dong not found in dong_scores.csv")
+
 
 def _get_district_baseline_from_db(district: str) -> Optional[dict]:
     with SessionLocal() as s:
@@ -617,14 +669,27 @@ def list_dong_scores():
 
 @app.get("/dong_scores/{gu}")
 def list_dong_scores_by_gu(gu: str):
-    rows = [r for r in _load_dong_rows() if r.get("gu") == gu]
-    if not rows:
+    rows = _load_dong_rows()
+    # ★ _eq_gu 로 비교
+    out = [r for r in rows if _eq_gu(r.get("gu",""), gu)]
+    if not out:
         raise HTTPException(status_code=404, detail="no dongs for this district")
-    return rows
+    return out
+
 
 @app.get("/dong_scores/{gu}/{dong}")
 def get_dong_score(gu: str, dong: str):
-    for r in _load_dong_rows():
-        if r.get("gu") == gu and r.get("dong") == dong:
+    rows = _load_dong_rows()
+    # 먼저 동일 구만 필터
+    cand = [r for r in rows if _eq_gu(r.get("gu",""), gu)]
+
+    # 동 정규화 매칭
+    for r in cand:
+        if _eq_dong(r.get("dong",""), dong):
             return r
-    raise HTTPException(status_code=404, detail="dong not found")
+
+    # 근사치 제안(디버깅 도움)
+    names = [ _n(_strip_paren(r.get("dong",""))) for r in cand ]
+    suggestions = get_close_matches(_n(_strip_paren(dong)), names, n=5, cutoff=0.6)
+    raise HTTPException(status_code=404, detail={"msg": f"dong not found in '{gu}'", "suggestions": suggestions})
+
