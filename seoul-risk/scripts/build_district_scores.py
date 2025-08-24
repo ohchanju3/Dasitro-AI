@@ -1,13 +1,12 @@
-# scripts/build_district_scores.py
 import os, json, csv, math
 from collections import defaultdict
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 GEOJSON_PATH = os.path.join(DATA_DIR, "seoul_gu.geojson")
 INCIDENTS_PATH = os.path.join(DATA_DIR, "incidents.json")
-STATIONS_PATH = os.path.join(DATA_DIR, "stations.json")       # optional
-CONS_PATH = os.path.join(DATA_DIR, "construction.json")       # optional
-MANUAL_CSV = os.path.join(DATA_DIR, "manual_grades.csv")      # optional (없으면 생성)
+STATIONS_PATH = os.path.join(DATA_DIR, "stations.json")       
+CONS_PATH = os.path.join(DATA_DIR, "construction.json")      
+MANUAL_CSV = os.path.join(DATA_DIR, "manual_grades.csv")      
 OUT_CSV = os.path.join(DATA_DIR, "district_scores.csv")
 
 # ------------------------------
@@ -248,3 +247,168 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# scripts/build_district_scores.py (추가/변경)
+
+DONG_MANUAL_CSV = os.path.join(DATA_DIR, "manual_grades_dong.csv")  # NEW
+
+def safe_int_1_5(s):
+    try:
+        v = int(str(s).strip())
+        return min(5, max(1, v))
+    except:
+        return None
+
+def load_manual_gu_csv(path):
+    """기존 구 단위 수기 CSV 로더 (그대로)"""
+    manual = {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            rdr = csv.DictReader(f)
+            for r in rdr:
+                gu = (r.get("district") or "").strip()
+                if not gu:
+                    continue
+                manual[gu] = {
+                    "groundwater": safe_int_1_5(r.get("groundwater")),
+                    "ground":      safe_int_1_5(r.get("ground")),
+                    "old":         safe_int_1_5(r.get("old")),
+                }
+    return manual
+
+def load_manual_dong_csv(path):
+    """동 단위 수기 CSV 로드 → 구 단위로 가중 평균 집계"""
+    if not os.path.exists(path):
+        return {}
+
+    by_gu = {}
+    with open(path, "r", encoding="utf-8") as f:
+        rdr = csv.DictReader(f)
+        for r in rdr:
+            gu   = (r.get("gu")   or "").strip()
+            dong = (r.get("dong") or "").strip()
+            if not gu or not dong:
+                continue
+
+            gw = safe_int_1_5(r.get("groundwater"))
+            gr = safe_int_1_5(r.get("ground"))
+            od = safe_int_1_5(r.get("old"))
+
+            # 가중치 (없으면 1)
+            try:
+                w = float(r.get("weight") or 1.0)
+                if w <= 0: w = 1.0
+            except:
+                w = 1.0
+
+            slot = by_gu.setdefault(gu, {"gw_sum":0.0,"gw_w":0.0,
+                                         "gr_sum":0.0,"gr_w":0.0,
+                                         "od_sum":0.0,"od_w":0.0})
+            if gw is not None:
+                slot["gw_sum"] += gw * w
+                slot["gw_w"]   += w
+            if gr is not None:
+                slot["gr_sum"] += gr * w
+                slot["gr_w"]   += w
+            if od is not None:
+                slot["od_sum"] += od * w
+                slot["od_w"]   += w
+
+    # 가중 평균 → 정수 1~5로 클리핑
+    agg = {}
+    for gu, s in by_gu.items():
+        def avg(sumv, w):
+            if w <= 0: return None
+            v = round(sumv / w)   # 반올림
+            return min(5, max(1, int(v)))
+        agg[gu] = {
+            "groundwater": avg(s["gw_sum"], s["gw_w"]),
+            "ground":      avg(s["gr_sum"], s["gr_w"]),
+            "old":         avg(s["od_sum"], s["od_w"]),
+        }
+    return agg
+
+def ensure_dong_template(path, all_gus):
+    """동 수기 템플릿이 없으면 생성: 비어 있는 샘플(gu만)"""
+    if os.path.exists(path):
+        return
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["dong","gu","groundwater","ground","old","weight"])
+        # 동 목록을 모를 때는 빈 줄 + 안내용 머리만 생성
+        # 만약 동 목록 CSV가 있으면 여기서 채워 넣을 수도 있음.
+    print(f"[i] 동 수기 입력 템플릿 생성: {path} (dong,gu,groundwater,ground,old[,weight])")
+
+def main():
+    geoms, all_gus = load_district_geoms(GEOJSON_PATH)
+
+    incidents = load_points(INCIDENTS_PATH)
+    stations  = load_points(STATIONS_PATH) if os.path.exists(STATIONS_PATH) else []
+    cons      = load_points(CONS_PATH) if os.path.exists(CONS_PATH) else []
+
+    inc_cnt = count_by_district(incidents, geoms)
+    st_cnt  = count_by_district(stations, geoms) if stations else defaultdict(int)
+    cons_cnt= count_by_district(cons, geoms)     if cons else defaultdict(int)
+
+    inc_grade = to_grades(inc_cnt, all_gus)
+    sub_grade = to_grades(st_cnt,  all_gus)
+    con_grade = to_grades(cons_cnt,all_gus)
+
+    # (A) 구 단위 수기 템플릿 보장
+    if not os.path.exists(MANUAL_CSV):
+        with open(MANUAL_CSV, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["district","groundwater","ground","old"])
+            for gu in all_gus:
+                w.writerow([gu, "", "", ""])
+        print(f"[i] 수기 입력 템플릿 생성: {MANUAL_CSV} (groundwater/ground/old 1~5 등급 입력)")
+
+    # (B) 동 단위 수기 템플릿도 보장
+    ensure_dong_template(DONG_MANUAL_CSV, all_gus)
+
+    # (C) 수기 로드
+    manual_gu   = load_manual_gu_csv(MANUAL_CSV)           # 구 단위(기존)
+    manual_dong = load_manual_dong_csv(DONG_MANUAL_CSV)    # 동 → 구 집계(신규)
+
+    # (D) 최종 수기값 우선순위: "구 단위 직접 입력" > "동 집계"
+    def merged_manual_for_gu(gu):
+        g1 = manual_gu.get(gu, {}) if manual_gu else {}
+        g2 = manual_dong.get(gu, {}) if manual_dong else {}
+        return {
+            "groundwater": g1.get("groundwater") or g2.get("groundwater"),
+            "ground":      g1.get("ground")      or g2.get("ground"),
+            "old":         g1.get("old")         or g2.get("old"),
+        }
+
+    # CSV 출력
+    with open(OUT_CSV, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow([
+            "district",
+            "incident_count","incident_grade",
+            "station_count","subway_grade",
+            "construction_count","construction_grade",
+            "groundwater","ground","old",
+            "final_grade_simple"
+        ])
+        for gu in all_gus:
+            mm = merged_manual_for_gu(gu)
+            gw, gr, od = mm.get("groundwater"), mm.get("ground"), mm.get("old")
+
+            comps = [inc_grade.get(gu,1), sub_grade.get(gu,1)]
+            if gw: comps.append(gw)
+            if gr: comps.append(gr)
+            if od: comps.append(od)
+            final = round(sum(comps)/len(comps), 2) if comps else ""
+
+            w.writerow([
+                gu,
+                inc_cnt.get(gu,0), inc_grade.get(gu,1),
+                st_cnt.get(gu,0),  sub_grade.get(gu,1),
+                cons_cnt.get(gu,0),con_grade.get(gu,1),
+                gw or "", gr or "", od or "",
+                final
+            ])
+
+    print(f"[✓] 저장: {OUT_CSV}")
+    print("    - 필요하면 data/manual_grades.csv 또는 data/manual_grades_dong.csv 를 채운 뒤 다시 실행하세요.")

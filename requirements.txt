@@ -4,4 +4,5 @@ pillow
 numpy
 ultralytics
 sqlalchemy
-requests   # (테스트 스크립트용)
+requests   
+python-multipart

@@ -7,8 +7,9 @@ from PIL import Image, ImageDraw, ImageOps, ImageFilter
 from ultralytics import YOLO
 import csv
 
+# ===== 파일 경로 =====
 DISTRICT_CSV = os.getenv("DISTRICT_CSV", "data/district_scores.csv")
-
+DONG_CSV     = os.getenv("DONG_CSV", "data/dong_scores.csv")
 
 # ==== Inference 설정 ====
 MODEL_PATH  = os.getenv("MODEL_PATH", "weights/best.pt")
@@ -25,12 +26,12 @@ FALLBACK_ENABLE      = int(os.getenv("FALLBACK_ENABLE", "1"))
 CONF_FALLBACK        = float(os.getenv("CONF_FALLBACK", "0.28"))
 IOU_FALLBACK         = float(os.getenv("IOU_FALLBACK",  "0.45"))
 IMG_SIZE_FALLBACK    = int(os.getenv("IMG_SIZE_FALLBACK", "1536"))
-PREPROC_FALLBACK     = os.getenv("PREPROC_FALLBACK", "autocontrast")  # autocontrast/none
+PREPROC_FALLBACK     = os.getenv("PREPROC_FALLBACK", "autocontrast")  
 
 # 위험도 계산 파라미터
 RISK_SCALE  = float(os.getenv("RISK_SCALE", 2.0))
 RISK_BIAS   = float(os.getenv("RISK_BIAS", 0.00))
-RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 5.0))   # 검출 0개일 때 고정 %
+RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 5.0))   
 
 # 노이즈 억제(너무 작은 검출 제거)
 MIN_AREA_RATIO = float(os.getenv("MIN_AREA_RATIO", "0.000001"))
@@ -60,7 +61,19 @@ def sigmoid(x: float) -> float:
 
 # ==== 앱/모델 초기화 ====
 app = FastAPI(title="Sinkhole Risk AI (inference + baseline combine)")
-model = YOLO(MODEL_PATH)
+
+# YOLO 스킵 모드(테스트용)
+if os.getenv("SKIP_YOLO", "0") == "1":
+    class _DummyModel:
+        names = {0: "pothole"}
+        def predict(self, *args, **kwargs):
+            class R:
+                boxes = type("B", (), {"cls": [], "conf": [], "xyxy": []})()
+                masks = None
+            return [R()]
+    model = _DummyModel()
+else:
+    model = YOLO(MODEL_PATH)
 
 # 모델 라벨 읽기
 MODEL_NAMES: Dict[int, str] = {}
@@ -303,6 +316,20 @@ def _aggregate_risks(risks: List[float], mode: str = "max") -> float:
     if mode in ("p90","p95"): return _percentile(risks, p=90 if mode=="p90" else 95)
     return float(max(risks))
 
+def _load_csv_rows(path: str) -> List[dict]:
+    with open(path, newline='', encoding='utf-8') as f:
+        return list(csv.DictReader(f))
+
+def _load_dong_rows() -> List[dict]:
+    return _load_csv_rows(DONG_CSV)
+
+def _to_int_safe(v) -> Optional[int]:
+    if v in (None, "", "NaN"): return None
+    try:
+        return int(round(float(v)))
+    except:
+        return None
+
 # ===============================
 #   ▽▽▽  정성 점수 저장 (SQLite)
 # ===============================
@@ -316,13 +343,12 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 class BaselineScore(Base):
     __tablename__ = "baseline_scores"
-    district   = Column(String(64), primary_key=True)
-    groundwater= Column(Float, default=None)
-    ground     = Column(Float, default=None)
-    subway     = Column(Float, default=None)
-    incident   = Column(Float, default=None)
-    old        = Column(Float, default=None)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow)
+    district    = Column(String(64), primary_key=True)
+    groundwater = Column(Float, default=None)
+    subway      = Column(Float, default=None)
+    incident    = Column(Float, default=None)
+    old         = Column(Float, default=None)
+    updated_at  = Column(DateTime)  # 생성/업데이트 시에 직접 세팅
 
 Base.metadata.create_all(engine)
 
@@ -337,6 +363,48 @@ def _grade_to_percent(g: Optional[float]) -> Optional[float]:
 
 def _final_grade(p: float) -> int:
     return 1 if p < 20 else 2 if p < 40 else 3 if p < 60 else 4 if p < 80 else 5
+
+# ===== Helper: 동/구 베이스라인 로드 =====
+def _get_dong_baseline(district: str, dong: str) -> dict:
+    """
+    dong_scores.csv에서 등급(1~5)을 읽어 baseline dict 반환.
+    incident/subway/groundwater/old 만 사용(구 DB 스키마와 일치).
+    """
+    for r in _load_dong_rows():
+        if r.get("gu") == district and r.get("dong") == dong:
+            return dict(
+                incident=_to_int_safe(r.get("incident_grade")),
+                subway=_to_int_safe(r.get("subway_grade")),
+                groundwater=_to_int_safe(r.get("groundwater")),
+                old=_to_int_safe(r.get("old")),
+            )
+    raise HTTPException(status_code=404, detail="dong not found in dong_scores.csv")
+
+def _get_district_baseline_from_db(district: str) -> Optional[dict]:
+    with SessionLocal() as s:
+        row = s.query(BaselineScore).filter_by(district=district).first()
+        if not row:
+            return None
+        return dict(
+            groundwater=row.groundwater,
+            subway=row.subway,
+            incident=row.incident,
+            old=row.old
+        )
+
+def _get_district_baseline_from_csv(district: str) -> Optional[dict]:
+    """
+    district_scores.csv에서 등급(1~5) 가져와 baseline 구성.
+    """
+    for r in _load_csv_rows(DISTRICT_CSV):
+        if r.get("district") == district:
+            return dict(
+                incident=_to_int_safe(r.get("incident_grade")),
+                subway=_to_int_safe(r.get("subway_grade")),
+                groundwater=_to_int_safe(r.get("groundwater")),
+                old=_to_int_safe(r.get("old")),
+            )
+    return None
 
 # ===============================
 #            엔드포인트
@@ -403,7 +471,7 @@ def upsert_baseline(item: dict = Body(...)):
     JSON 예:
     {
       "district":"중구",
-      "groundwater":3, "ground":2, "subway":4, "incident":3, "old":2
+      "groundwater":3, "subway":4, "incident":3, "old":2
     }
     일부 필드만 보내도 됨(부분 수정).
     """
@@ -416,15 +484,17 @@ def upsert_baseline(item: dict = Body(...)):
         if not row:
             row = BaselineScore(district=name)
             s.add(row)
-        for k in ["groundwater","ground","subway","incident","old"]:
+        for k in ["groundwater","subway","incident","old"]:
             if k in item and item[k] is not None:
                 setattr(row, k, float(item[k]))
         row.updated_at = datetime.datetime.utcnow()
         s.commit()
         out = {
             "district": row.district,
-            "groundwater": row.groundwater, "ground": row.ground,
-            "subway": row.subway, "incident": row.incident, "old": row.old,
+            "groundwater": row.groundwater,
+            "subway": row.subway,
+            "incident": row.incident,
+            "old": row.old,
             "updated_at": row.updated_at.isoformat()+"Z"
         }
     return {"status":"ok","baseline":out}
@@ -437,8 +507,10 @@ def get_baseline(name: str):
             raise HTTPException(status_code=404, detail="baseline not found")
         return {
             "district": row.district,
-            "groundwater": row.groundwater, "ground": row.ground,
-            "subway": row.subway, "incident": row.incident, "old": row.old,
+            "groundwater": row.groundwater,
+            "subway": row.subway,
+            "incident": row.incident,
+            "old": row.old,
             "updated_at": row.updated_at.isoformat()+"Z"
         }
 
@@ -446,29 +518,27 @@ def get_baseline(name: str):
 @app.post("/combine_risk", dependencies=[Depends(_check_key)])
 async def combine_risk(
     district: Optional[str] = Form(None),
-    images: Optional[List[UploadFile]] = File(None),   # 0~3장
+    dong: Optional[str] = Form(None),                      # ★ 동 단위 지원
+    images: Optional[List[UploadFile]] = File(None),       # 0~3장
     agg: str = Query(AGG_DEFAULT),
 
-    # 가중치(기본: 이미지 40, 나머지 15씩, old 0)
+    # 가중치(예시 기본값)
     w_image: float = Form(40),
     w_groundwater: float = Form(15),
-    w_ground: float = Form(15),
     w_subway: float = Form(15),
     w_incident: float = Form(15),
-    w_old: float = Form(0),
+    w_old: float = Form(15),
 
     lite: int = Query(0)
 ):
     # 1) baseline 로드
     baseline = None
-    if district:
-        with SessionLocal() as s:
-            row = s.query(BaselineScore).filter_by(district=district).first()
-            if row:
-                baseline = dict(
-                    groundwater=row.groundwater, ground=row.ground,
-                    subway=row.subway, incident=row.incident, old=row.old
-                )
+    if district and dong:
+        # dong_scores.csv에서 5지표(incident/subway/groundwater/old) 등급 읽기
+        baseline = _get_dong_baseline(district, dong)
+    elif district:
+        # DB → 없으면 district_scores.csv 폴백
+        baseline = _get_district_baseline_from_db(district) or _get_district_baseline_from_csv(district)
 
     # 2) 이미지 위험도
     img_percent = None
@@ -488,7 +558,6 @@ async def combine_risk(
     # 3) 정성 → 퍼센트
     def g2p(v): return _grade_to_percent(v) if v is not None else None
     gw = g2p((baseline or {}).get("groundwater")) if baseline else None
-    gr = g2p((baseline or {}).get("ground")) if baseline else None
     sw = g2p((baseline or {}).get("subway")) if baseline else None
     ic = g2p((baseline or {}).get("incident")) if baseline else None
     od = g2p((baseline or {}).get("old")) if baseline else None
@@ -497,54 +566,65 @@ async def combine_risk(
     parts, weights, labels = [], [], []
     if img_percent is not None:
         parts.append(img_percent); weights.append(w_image); labels.append("image")
-    for v,w,name in [(gw,w_groundwater,"groundwater"),(gr,w_ground,"ground"),
-                     (sw,w_subway,"subway"),(ic,w_incident,"incident"),(od,w_old,"old")]:
-        if v is not None:
+    for v,w,name in [(gw,w_groundwater,"groundwater"),
+                     (sw,w_subway,"subway"),
+                     (ic,w_incident,"incident"),
+                     (od,w_old,"old")]:
+        if v is not None and w and w>0:
             parts.append(v); weights.append(w); labels.append(name)
 
     if not parts:
-        raise HTTPException(status_code=400, detail="no image or baseline for this district")
+        raise HTTPException(status_code=400, detail="no image or baseline for this area")
 
-    filt = [(p,w,l) for p,w,l in zip(parts,weights,labels) if w and w>0]
-    if not filt:
-        weights = [1.0]*len(parts)
-        weights_n = [w/sum(weights) for w in weights]
-    else:
-        parts, weights, labels = zip(*filt)
-        weights_n = [w/sum(weights) for w in weights]
-
+    weights_n = [w/sum(weights) for w in weights]
     combined = float(sum(p*w for p,w in zip(parts,weights_n)))
     grade = _final_grade(combined)
 
     resp = {
         "district": district,
+        "dong": dong,
         "combined_risk_percent": round(combined,2),
         "combined_grade_1_to_5": grade,
         "aggregate_mode": agg,
         "weights_used": {
-            "image": w_image, "groundwater": w_groundwater, "ground": w_ground,
+            "image": w_image, "groundwater": w_groundwater,
             "subway": w_subway, "incident": w_incident, "old": w_old
         }
     }
     if not lite:
         resp["image_part"] = {"img_percent": img_percent, "items": items} if img_percent is not None else None
         resp["baseline_part"] = {
-            "groundwater_percent": gw, "ground_percent": gr, "subway_percent": sw,
-            "incident_percent": ic, "old_percent": od
+            "groundwater_percent": gw, "subway_percent": sw, "incident_percent": ic, "old_percent": od
         } if baseline else None
 
     return resp
 
-
+# ====== CSV 조회 ======
 @app.get("/district_scores")
 def list_scores():
-    with open(DISTRICT_CSV, newline='', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
+    return _load_csv_rows(DISTRICT_CSV)
 
 @app.get("/district_scores/{gu}")
 def get_score(gu: str):
-    with open(DISTRICT_CSV, newline='', encoding='utf-8') as f:
-        for row in csv.DictReader(f):
-            if row.get("district") == gu:
-                return row
+    for row in _load_csv_rows(DISTRICT_CSV):
+        if row.get("district") == gu:
+            return row
     raise HTTPException(status_code=404, detail="district not found")
+
+@app.get("/dong_scores")
+def list_dong_scores():
+    return _load_dong_rows()
+
+@app.get("/dong_scores/{gu}")
+def list_dong_scores_by_gu(gu: str):
+    rows = [r for r in _load_dong_rows() if r.get("gu") == gu]
+    if not rows:
+        raise HTTPException(status_code=404, detail="no dongs for this district")
+    return rows
+
+@app.get("/dong_scores/{gu}/{dong}")
+def get_dong_score(gu: str, dong: str):
+    for r in _load_dong_rows():
+        if r.get("gu") == gu and r.get("dong") == dong:
+            return r
+    raise HTTPException(status_code=404, detail="dong not found")
