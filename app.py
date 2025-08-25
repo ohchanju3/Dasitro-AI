@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image, ImageDraw, ImageOps, ImageFilter
 from ultralytics import YOLO
 import csv
+import numpy as np
 
 # ===== 파일 경로 =====
 DISTRICT_CSV = os.getenv("DISTRICT_CSV", "data/district_scores.csv")
@@ -13,7 +14,10 @@ DONG_CSV     = os.getenv("DONG_CSV", "data/dong_scores.csv")
 
 # ==== Inference 설정 ====
 MODEL_PATH  = os.getenv("MODEL_PATH", "weights/best.pt")
-AGG_DEFAULT = os.getenv("AGG_DEFAULT", "max")  # max | mean | p90
+AGG_DEFAULT = os.getenv("AGG_DEFAULT", "mean")  # max | mean | p90
+
+STRONG_EDGE_RATIO = float(os.getenv("STRONG_EDGE_RATIO", "0.06"))  # 강한 엣지 기준
+RELAXED_COLORFUL  = float(os.getenv("RELAXED_COLORFUL",  "60.0"))
 
 # 1차(빠른) 추론
 CONF_THRES  = float(os.getenv("CONF_THRES", 0.50))
@@ -31,7 +35,7 @@ PREPROC_FALLBACK     = os.getenv("PREPROC_FALLBACK", "autocontrast")
 # 위험도 계산 파라미터
 RISK_SCALE  = float(os.getenv("RISK_SCALE", 2.0))
 RISK_BIAS   = float(os.getenv("RISK_BIAS", 0.00))
-RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 0.0))   
+RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 0.0))   # <- 0% 기본값
 
 # 노이즈 억제(너무 작은 검출 제거)
 MIN_AREA_RATIO = float(os.getenv("MIN_AREA_RATIO", "0.000001"))
@@ -42,7 +46,12 @@ OVERLAY_MAX_W = int(os.getenv("OVERLAY_MAX_W", "1280"))
 # 보안(백↔AI 내부용 키)
 AI_API_KEY  = os.getenv("AI_API_KEY", "")
 
-# ==== 모델/클래스 정의 ====
+# ===== [ADD] Scene filter (env) =====
+SCENE_FILTER_ENABLE   = int(os.getenv("SCENE_FILTER_ENABLE", "1"))
+SCENE_MIN_EDGE_RATIO  = float(os.getenv("SCENE_MIN_EDGE_RATIO", "0.008"))
+SCENE_MAX_COLORFUL    = float(os.getenv("SCENE_MAX_COLORFUL", "32.0"))
+
+# ===== 모델/클래스 정의 =====
 CLASS_KEYS = ["longitudinal_crack", "transverse_crack", "alligator_crack", "pothole"]
 W = { "longitudinal_crack": 0.7, "transverse_crack": 0.7, "alligator_crack": 1.1, "pothole": 1.3 }
 NMAX = {"longitudinal_crack":15, "transverse_crack":15, "alligator_crack":10, "pothole":5}
@@ -241,13 +250,71 @@ def _infer_tiled(im: Image.Image, grid: int = 2,
 
     return counts, areas, detections, overlay
 
+# ===== [ADD] Scene filter (heuristic) =====
+def _colorfulness_metric(im: Image.Image) -> float:
+    arr = np.asarray(im.resize((384, 384))).astype(np.float32)
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        return 0.0
+    R, G, B = arr[...,0], arr[...,1], arr[...,2]
+    rg = np.abs(R - G)
+    yb = np.abs(0.5*(R + G) - B)
+    return float(
+        math.sqrt(np.std(rg)**2 + np.std(yb)**2) +
+        0.3*math.sqrt(np.mean(rg)**2 + np.mean(yb)**2)
+    )
+
+def _edge_ratio(im: Image.Image) -> float:
+    g = im.convert("L").resize((512, 512), Image.BILINEAR).filter(ImageFilter.FIND_EDGES)
+    arr = np.asarray(g).astype(np.float32)
+    thr = max(10.0, np.percentile(arr, 92))
+    return float((arr >= thr).mean())
+
+def _is_road_scene_heuristic(im: Image.Image) -> Tuple[bool, dict]:
+    c = _colorfulness_metric(im)
+    e = _edge_ratio(im)
+
+    # 1) 엣지가 아주 강하면(도로 차선/경계가 뚜렷) 컬러풀해도 통과
+    if e >= STRONG_EDGE_RATIO and c <= RELAXED_COLORFUL:
+        return True, {"colorfulness": round(c,2), "edge_ratio": round(e,4), "rule": "strong-edge"}
+
+    # 2) 일반 규칙: 컬러풀 낮고 + 엣지 충분
+    ok = (c <= SCENE_MAX_COLORFUL) and (e >= SCENE_MIN_EDGE_RATIO)
+    return bool(ok), {"colorfulness": round(c,2), "edge_ratio": round(e,4), "rule": "base"}
+
+def _post_detection_sanity(use_counts: dict, use_areas: dict, dets: list) -> bool:
+    area_sum = float(sum(use_areas.values()))
+    det_n = int(sum(use_counts.values()))
+    mean_conf = (sum(d.get("confidence",0.0) for d in dets)/len(dets)) if dets else 0.0
+    if det_n <= 2 and area_sum <= 0.0003:
+        return False
+    if mean_conf < 0.35 and area_sum < 0.0008:
+        return False
+    return True
+
 def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int, return_overlay: bool=False) -> Dict[str, Any]:
     t0 = time.time()
+    diag = None
     try:
         im = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception:
         raise HTTPException(status_code=400, detail="invalid image")
 
+    if SCENE_FILTER_ENABLE:
+        ok_scene, diag = _is_road_scene_heuristic(im)
+        if not ok_scene:
+            out = {
+                "risk_percent": float(RISK_EMPTY),
+                "explanations": [], "detections": [],
+                "used_pass": "scene_filter_block",
+                "scene_diag": diag,
+                "latency_ms": int((time.time()-t0)*1000),
+                "scene_diag": diag,
+            }
+            if return_overlay:
+                out["preview_overlay_png"] = _encode_overlay_png(im)
+            return out
+
+    # 기존 추론 파이프라인
     c1, a1, d1, ov1 = _infer_once(im, conf_thres, iou_thres, img_size)
     use_counts, use_areas, use_dets, use_overlay = c1, a1, d1, ov1
     used_pass = "fast"
@@ -263,11 +330,12 @@ def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int
                 used_pass = "fallback"
 
     if sum(use_counts.values()) == 0:
-        c3, a3, d3, ov3 = _infer_tiled(im, grid=2, conf=0.22, iou=0.45, imgsz=1280)
+        c3, a3, d3, ov3 = _infer_tiled(im, grid=2, conf=0.35, iou=0.45, imgsz=1280)
         if sum(c3.values()) > 0:
             use_counts, use_areas, use_dets, use_overlay = c3, a3, d3, ov3
             used_pass = "tiled"
 
+    # 아무것도 없으면 RISK_EMPTY
     if sum(use_counts.values()) == 0 and all(v == 0.0 for v in use_areas.values()):
         out = {
             "risk_percent": float(RISK_EMPTY),
@@ -278,6 +346,18 @@ def analyze_image(raw: bytes, conf_thres: float, iou_thres: float, img_size: int
             out["preview_overlay_png"] = _encode_overlay_png(use_overlay)
         return out
 
+    if not _post_detection_sanity(use_counts, use_areas, use_dets):
+        out = {
+            "risk_percent": float(RISK_EMPTY),
+            "explanations": [], "detections": [],
+            "used_pass": "sanity_block",
+            "latency_ms": int((time.time()-t0)*1000),
+        }
+        if return_overlay:
+            out["preview_overlay_png"] = _encode_overlay_png(use_overlay)
+        return out
+
+    # 점수 계산
     score = RISK_BIAS
     explanations = []
     for c in W.keys():
@@ -317,17 +397,14 @@ def _aggregate_risks(risks: List[float], mode: str = "max") -> float:
     return float(max(risks))
 
 def _load_csv_rows(path: str) -> List[dict]:
-    # ★ utf-8-sig 로 BOM 안전하게 제거
     with open(path, newline='', encoding='utf-8-sig') as f:
         rows = list(csv.DictReader(f))
-    # ★ gu/dong 를 로드 시점에 표준화
     for r in rows:
         if "gu" in r and r["gu"] is not None:
             r["gu"] = _n(r["gu"])
         if "dong" in r and r["dong"] is not None:
             r["dong"] = _n(r["dong"])
     return rows
-
 
 def _load_dong_rows() -> List[dict]:
     return _load_csv_rows(DONG_CSV)
@@ -347,9 +424,9 @@ from difflib import get_close_matches
 
 def _n(s: str) -> str:
     if not s: return ""
-    s = str(s).replace("\ufeff","")          # BOM 제거
-    s = unicodedata.normalize("NFC", s)      # 유니코드 정규화
-    s = re.sub(r"\s+", " ", s).strip()       # 공백 정리
+    s = str(s).replace("\ufeff","")
+    s = unicodedata.normalize("NFC", s)
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
 def _strip_paren(s: str) -> str:
@@ -361,7 +438,6 @@ def _norm_gu(s: str) -> str:
 _DOT = re.compile(r"[·\.]")
 
 def _dong_aliases(d: str) -> set:
-    """상계3·4동 → {상계3동, 상계4동} 같은 별칭 생성"""
     base = _n(_strip_paren(d))
     out = {base}
     if "동" in base and _DOT.search(base):
@@ -373,7 +449,7 @@ def _dong_aliases(d: str) -> set:
                 tok = tok.strip()
                 if tok: out.add(f"{pref}{tok}동")
     if "제" in base:
-        out.add(re.sub(r"제(\d+)동$", r"\1동", base))  # 제1동 → 1동
+        out.add(re.sub(r"제(\d+)동$", r"\1동", base))
     return out
 
 def _eq_gu(a: str, b: str) -> bool:
@@ -384,9 +460,8 @@ def _eq_dong(a: str, b: str) -> bool:
     if A == B: return True
     return bool(_dong_aliases(A) & _dong_aliases(B))
 
-
 # ===============================
-#   ▽▽▽  정성 점수 저장 (SQLite)
+#   정성 점수 저장 (SQLite)
 # ===============================
 from sqlalchemy import create_engine, Column, Float, String, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -403,7 +478,7 @@ class BaselineScore(Base):
     subway      = Column(Float, default=None)
     incident    = Column(Float, default=None)
     old         = Column(Float, default=None)
-    updated_at  = Column(DateTime)  # 생성/업데이트 시에 직접 세팅
+    updated_at  = Column(DateTime)
 
 Base.metadata.create_all(engine)
 
@@ -431,7 +506,6 @@ def _get_dong_baseline(district: str, dong: str) -> dict:
             )
     raise HTTPException(status_code=404, detail="dong not found in dong_scores.csv")
 
-
 def _get_district_baseline_from_db(district: str) -> Optional[dict]:
     with SessionLocal() as s:
         row = s.query(BaselineScore).filter_by(district=district).first()
@@ -445,9 +519,6 @@ def _get_district_baseline_from_db(district: str) -> Optional[dict]:
         )
 
 def _get_district_baseline_from_csv(district: str) -> Optional[dict]:
-    """
-    district_scores.csv에서 등급(1~5) 가져와 baseline 구성.
-    """
     for r in _load_csv_rows(DISTRICT_CSV):
         if r.get("district") == district:
             return dict(
@@ -474,6 +545,11 @@ def healthz():
             "risk": {"scale": RISK_SCALE, "bias": RISK_BIAS, "empty": RISK_EMPTY, "min_area_ratio": MIN_AREA_RATIO},
             "overlay": {"max_w": OVERLAY_MAX_W},
             "batch": {"agg_default": AGG_DEFAULT},
+            "scene_filter": {
+                "enable": bool(SCENE_FILTER_ENABLE),
+                "min_edge_ratio": SCENE_MIN_EDGE_RATIO,
+                "max_colorful": SCENE_MAX_COLORFUL
+            }
         }
     }
 
@@ -507,7 +583,8 @@ async def infer_batch(
             "used_pass": out.get("used_pass"),
             "latency_ms": out.get("latency_ms"),
             "detections": out.get("detections", []) if not lite else [],
-            "preview_overlay_png": out.get("preview_overlay_png") if overlay else None
+            "preview_overlay_png": out.get("preview_overlay_png") if overlay else None,
+            "scene_diag": out.get("scene_diag")
         })
         risks.append(float(out.get("risk_percent", 0.0)))
 
@@ -519,14 +596,6 @@ async def infer_batch(
 # ====== 정성 점수 관리 ======
 @app.post("/districts/baseline/upsert", dependencies=[Depends(_check_key)])
 def upsert_baseline(item: dict = Body(...)):
-    """
-    JSON 예:
-    {
-      "district":"중구",
-      "groundwater":3, "subway":4, "incident":3, "old":2
-    }
-    일부 필드만 보내도 됨(부분 수정).
-    """
     name = item.get("district")
     if not name:
         raise HTTPException(status_code=400, detail="district required")
@@ -586,10 +655,8 @@ async def combine_risk(
     # 1) baseline 로드
     baseline = None
     if district and dong:
-        # dong_scores.csv에서 5지표(incident/subway/groundwater/old) 등급 읽기
         baseline = _get_dong_baseline(district, dong)
     elif district:
-        # DB → 없으면 district_scores.csv 폴백
         baseline = _get_district_baseline_from_db(district) or _get_district_baseline_from_csv(district)
 
     # 2) 이미지 위험도
@@ -670,26 +737,18 @@ def list_dong_scores():
 @app.get("/dong_scores/{gu}")
 def list_dong_scores_by_gu(gu: str):
     rows = _load_dong_rows()
-    # ★ _eq_gu 로 비교
     out = [r for r in rows if _eq_gu(r.get("gu",""), gu)]
     if not out:
         raise HTTPException(status_code=404, detail="no dongs for this district")
     return out
 
-
 @app.get("/dong_scores/{gu}/{dong}")
 def get_dong_score(gu: str, dong: str):
     rows = _load_dong_rows()
-    # 먼저 동일 구만 필터
     cand = [r for r in rows if _eq_gu(r.get("gu",""), gu)]
-
-    # 동 정규화 매칭
     for r in cand:
         if _eq_dong(r.get("dong",""), dong):
             return r
-
-    # 근사치 제안(디버깅 도움)
-    names = [ _n(_strip_paren(r.get("dong",""))) for r in cand ]
+    names = [_n(_strip_paren(r.get("dong",""))) for r in cand]
     suggestions = get_close_matches(_n(_strip_paren(dong)), names, n=5, cutoff=0.6)
     raise HTTPException(status_code=404, detail={"msg": f"dong not found in '{gu}'", "suggestions": suggestions})
-
