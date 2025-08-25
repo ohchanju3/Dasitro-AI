@@ -31,7 +31,7 @@ PREPROC_FALLBACK     = os.getenv("PREPROC_FALLBACK", "autocontrast")
 # 위험도 계산 파라미터
 RISK_SCALE  = float(os.getenv("RISK_SCALE", 2.0))
 RISK_BIAS   = float(os.getenv("RISK_BIAS", 0.00))
-RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 5.0))   
+RISK_EMPTY  = float(os.getenv("RISK_EMPTY", 0.0))   
 
 # 노이즈 억제(너무 작은 검출 제거)
 MIN_AREA_RATIO = float(os.getenv("MIN_AREA_RATIO", "0.000001"))
